@@ -42,38 +42,34 @@ class ChineseHandWriteDataset(Dataset):
 
 
 # Create CNN Model
-class CNN_Model(nn.Module):
+class ConvNet(nn.Module):
     def __init__(self):
-        super(CNN_Model, self).__init__()
-        # Convolution 1 , input_shape=(1,64,64)
-        self.cnn1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
-        self.relu1 = nn.ReLU() # activation
-        # Max pool 1
-        self.maxpool1 = nn.MaxPool2d(kernel_size=2)
-        # Convolution 2
-        self.cnn2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
-        self.relu2 = nn.ReLU() # activation
-        # Max pool 2
-        self.maxpool2 = nn.MaxPool2d(kernel_size=2)
-        self.fc1 = nn.Linear(32 * 14 * 14, 1000)
-        self.fc2 = nn.Linear(1000, 50)
+        super(ConvNet, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=48, kernel_size=(3,3), padding=(1,1))
+        self.conv2 = nn.Conv2d(in_channels=48, out_channels=96, kernel_size=(3,3), padding=(1,1))
+        self.conv3 = nn.Conv2d(in_channels=96, out_channels=192, kernel_size=(3,3), padding=(1,1))
+        self.conv4 = nn.Conv2d(in_channels=192, out_channels=256, kernel_size=(3,3), padding=(1,1))
+        self.pool = nn.MaxPool2d(2, 2)
+        self.fc1 = nn.Linear(in_features=16*16*256, out_features=512)
+        self.fc2 = nn.Linear(in_features=512, out_features=64)
+        self.Dropout = nn.Dropout(0.25)
+        self.fc3 = nn.Linear(in_features=64, out_features=50)
 
     def forward(self, x):
-        # Convolution 1
-        out = self.cnn1(x)
-        out = self.relu1(out)
-        # Max pool 1
-        out = self.maxpool1(out)
-        # Convolution 2
-        out = self.cnn2(out)
-        out = self.relu2(out)
-        # Max pool 2
-        out = self.maxpool2(out)
-        out = out.view(out.size(0), -1)
-        # Linear function (readout)
-        out = self.fc1(out)
-        out = self.fc2(out)
-        return out
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = self.pool(x)
+        x = self.Dropout(x)
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = self.pool(x)
+        x = self.Dropout(x)
+        x = x.view(-1, 16*16*256)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.Dropout(x)
+        x = self.fc3(x)
+        return x
 
 
 def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader, device):
@@ -83,6 +79,7 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
     training_accuracy = []
     validation_loss = []
     validation_accuracy = []
+    best_acc = 0
     for epoch in range(num_epochs):
         # training model & store loss & acc / epoch
         correct_train = 0
@@ -140,11 +137,13 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
                 correct_test += (predicted == labels).float().sum()
         # 6.store val_acc / epoch
         val_accuracy = 100 * correct_test / float(total_test)
+        best_acc = max(best_acc, val_accuracy)
         validation_accuracy.append(val_accuracy)
         # 11.store val_loss / epoch
         validation_loss.append(val_loss.data)
-        print('Train Epoch: {}/{} Traing_Loss: {:.4f} Traing_acc: {:.2f}% Val_Loss: {:.4f} Val_accuracy: {:.2f}%'
-              .format(epoch+1, num_epochs, train_loss.data, train_accuracy, val_loss.data, val_accuracy))
+        print('Train Epoch: {}/{} Traing_Loss: {:.4f} Traing_acc: {:.2f}% Val_Loss: {:.4f} Val_accuracy: {:.2f} '
+              'Best Val_accuracy: {:.2f}%'.format(epoch+1, num_epochs, train_loss.data, train_accuracy,
+                                                val_loss.data, val_accuracy, best_acc))
 
     return training_loss, training_accuracy, validation_loss, validation_accuracy
 
@@ -197,7 +196,7 @@ def main():
         device = torch.device('cpu')
         print('Warning! Using CPU.')
 
-    cnn = CNN_Model()
+    cnn = ConvNet()
     cnn.to(device)
     print(cnn)
     summary(cnn, (1, 64, 64))
