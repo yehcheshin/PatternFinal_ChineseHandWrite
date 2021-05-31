@@ -42,33 +42,30 @@ class ChineseHandWriteDataset(Dataset):
 
 
 # Create CNN Model
-class ConvNet(nn.Module):
-    def __init__(self):
-        super(ConvNet, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=48, kernel_size=(3,3), padding=(1,1))
-        self.conv2 = nn.Conv2d(in_channels=48, out_channels=96, kernel_size=(3,3), padding=(1,1))
-        self.conv3 = nn.Conv2d(in_channels=96, out_channels=192, kernel_size=(3,3), padding=(1,1))
-        self.conv4 = nn.Conv2d(in_channels=192, out_channels=256, kernel_size=(3,3), padding=(1,1))
-        self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(in_features=16*16*256, out_features=512)
-        self.fc2 = nn.Linear(in_features=512, out_features=64)
-        self.Dropout = nn.Dropout(0.25)
-        self.fc3 = nn.Linear(in_features=64, out_features=50)
+class CNN(nn.Module):
+    def __init__(self, class_num):
+        super(CNN, self).__init__()
+
+        def conv_bn(inp, oup, stride):
+            return nn.Sequential(
+                nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+                nn.BatchNorm2d(oup),
+                nn.ReLU(inplace=True)
+            )
+
+        self.model = nn.Sequential(
+            conv_bn(1, 32, 2),
+            conv_bn(32, 64, 1),
+            conv_bn(64, 128, 2),
+            conv_bn(128, 128, 1),
+            nn.AvgPool2d(2),
+        )
+        self.fc = nn.Linear(128*8*8, class_num)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = self.pool(x)
-        x = self.Dropout(x)
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
-        x = self.pool(x)
-        x = self.Dropout(x)
-        x = x.view(-1, 16*16*256)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.Dropout(x)
-        x = self.fc3(x)
+        x = self.model(x)
+        x = x.view(-1, 128*8*8)
+        x = self.fc(x)
         return x
 
 
@@ -196,7 +193,7 @@ def main():
         device = torch.device('cpu')
         print('Warning! Using CPU.')
 
-    cnn = ConvNet()
+    cnn = CNN(class_num=50)
     cnn.to(device)
     print(cnn)
     summary(cnn, (1, 64, 64))
