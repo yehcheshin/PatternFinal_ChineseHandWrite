@@ -176,7 +176,7 @@ def main():
     LR = 0.001
     batch_size = 8
     valid_batch_size = 8
-    n_iters = 10000
+    n_iters = 1000
     epochs = n_iters / (len(train_dataset) / batch_size)
     epochs = int(epochs)
 
