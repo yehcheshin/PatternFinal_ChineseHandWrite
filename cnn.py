@@ -134,13 +134,17 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
                 correct_test += (predicted == labels).float().sum()
         # 6.store val_acc / epoch
         val_accuracy = 100 * correct_test / float(total_test)
-        best_acc = max(best_acc, val_accuracy)
         validation_accuracy.append(val_accuracy)
+        if val_accuracy > best_acc:
+            best_acc = val_accuracy
+            print('Save the Model!')
+            torch.save(model, 'best_model.pth')
         # 11.store val_loss / epoch
         validation_loss.append(val_loss.data)
         print('Train Epoch: {}/{} Traing_Loss: {:.4f} Traing_acc: {:.2f}% Val_Loss: {:.4f} Val_accuracy: {:.2f} '
               'Best Val_accuracy: {:.2f}%'.format(epoch+1, num_epochs, train_loss.data, train_accuracy,
                                                 val_loss.data, val_accuracy, best_acc))
+
 
     return training_loss, training_accuracy, validation_loss, validation_accuracy
 
