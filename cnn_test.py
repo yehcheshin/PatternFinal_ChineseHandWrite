@@ -56,13 +56,20 @@ def main():
         device = torch.device('cpu')
         print('Warning! Using CPU.')
 
-    model = torch.load(model_path)
+    model = None
+    try:
+        model = torch.load(model_path)
+
+    except:
+        print('Can not find the model file!')
+        exit()
+
     model.to(device)
 
     predictions, accuracy = evaluation(model, device, test_dataloader, len(y_test))
     print('Cnn predict label:', predictions)
-    print('Ground truth label:', y_test.data)
-    print('Test accuracy: %.4f' % accuracy)
+    print('Ground truth label:', y_test.data.tolist())
+    print('Test accuracy: %.2f' % accuracy)
 
 
 if __name__ == "__main__":
