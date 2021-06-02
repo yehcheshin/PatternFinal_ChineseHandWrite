@@ -25,22 +25,30 @@ def evaluation(model, device, dataloader, len_data):
 
 
 def image_show_test_data(root, y_t, y_pred):
-    fig = plt.gcf()
-    fig.set_size_inches(12, 14)
+    fig = plt.figure()
+    axes = []
+    row = int(len(y_t) / 5)
+    col = 5
+    # fig.set_size_inches(12, 14)
     for i, file in enumerate(os.listdir(root)):
         img_path = root + file
-        img = Image.open(img_path).convert('L')
+        img = Image.open(img_path)
         img = img.resize((64, 64))
-        plt.subplot(2, 5, i + 1)
+        axes.append(fig.add_subplot(row, col, i+1))
+        if y_t[i] == y_pred[i]:
+            axes[-1].set_title('label= %d, predict= %d' % (y_t[i], y_pred[i]), fontsize=10)
+        else:
+            axes[-1].set_title('label= %d, predict= %d' % (y_t[i], y_pred[i]), fontsize=10, color='red')
         a = np.asarray(img)
         plt.imshow(a)
-        plt.title('label= %d, predict= %d' % (y_t[i], y_pred[i]), fontsize=10)
+        plt.axis('off')
     plt.show()
 
 
 def main():
     root = './test_data/'
-    model_path = 'best_model.pth'
+    # model_path = 'best_model.pth'
+    model_path = 'final_model.pth'
 
     label_list = {}
     f = open('training data dic.txt', 'r', encoding="utf-8")
