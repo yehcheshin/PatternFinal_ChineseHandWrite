@@ -57,14 +57,16 @@ class CNN(nn.Module):
             conv_bn(32, 64, 1),
             conv_bn(64, 128, 2),
             conv_bn(128, 128, 1),
+            conv_bn(128, 256, 2),
+            conv_bn(256, 256, 1),
             nn.AvgPool2d(2),
         )
         self.dropout = nn.Dropout(0.2)
-        self.fc = nn.Linear(128*8*8, class_num)
+        self.fc = nn.Linear(256*4*4, class_num)
 
     def forward(self, x):
         x = self.model(x)
-        x = x.view(-1, 128*8*8)
+        x = x.view(-1, 256*4*4)
         x = self.dropout(x)
         x = self.fc(x)
         return x
@@ -151,7 +153,7 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
         print('Train Epoch: {}/{} Traing_Loss: {:.4f} Traing_acc: {:.2f}% Val_Loss: {:.4f} Val_accuracy: {:.2f} '
               'Best Val_accuracy: {:.2f}%'.format(epoch+1, num_epochs, train_loss.data, train_accuracy,
                                                 sum_val_loss / count, val_accuracy, best_acc))
-
+        torch.save(model, 'final_model.pth')
 
     return training_loss, training_accuracy, validation_loss, validation_accuracy
 
