@@ -56,9 +56,7 @@ class CNN(nn.Module):
             conv_bn(1, 32, 2),
             conv_bn(32, 64, 1),
             conv_bn(64, 128, 2),
-            nn.Dropout2d(0.2),
             conv_bn(128, 128, 1),
-            nn.Dropout2d(0.2),
             nn.AvgPool2d(2),
         )
         self.dropout = nn.Dropout(0.2)
@@ -170,7 +168,11 @@ def main():
 
     train_dataset = []
     valid_dataset = []
-    transform = transforms.ToTensor()
+    transform = transforms.Compose([
+        transforms.RandomAffine(degrees=(-10, 10), translate=(0.1, 0.1), fill=255),
+        transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.8, 1)),
+        transforms.ToTensor()
+    ])
     for idx, dir_ in enumerate(os.listdir(root)):
         dataset = ChineseHandWriteDataset(root=root + dir_, label_dic=label_list, transform=transform,
                                           resize=True,
@@ -210,7 +212,7 @@ def main():
     cnn.to(device)
     print(cnn)
     summary(cnn, (1, 64, 64))
-    opt = torch.optim.Adam(cnn.parameters(), lr=LR)  # optimize all cnn parameters
+    opt = torch.optim.AdamW(cnn.parameters(), lr=LR)  # optimize all cnn parameters
     ce = nn.CrossEntropyLoss()  # the target label is not one-hotted
 
     training_loss, training_accuracy, validation_loss, validation_accuracy = fit_model(cnn, ce, opt,
