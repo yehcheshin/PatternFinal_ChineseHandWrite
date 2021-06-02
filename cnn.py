@@ -52,19 +52,22 @@ class CNN(nn.Module):
                 nn.BatchNorm2d(oup),
                 nn.ReLU(inplace=True)
             )
-
         self.model = nn.Sequential(
             conv_bn(1, 32, 2),
             conv_bn(32, 64, 1),
             conv_bn(64, 128, 2),
+            nn.Dropout2d(0.2),
             conv_bn(128, 128, 1),
+            nn.Dropout2d(0.2),
             nn.AvgPool2d(2),
         )
+        self.dropout = nn.Dropout(0.2)
         self.fc = nn.Linear(128*8*8, class_num)
 
     def forward(self, x):
         x = self.model(x)
         x = x.view(-1, 128*8*8)
+        x = self.dropout(x)
         x = self.fc(x)
         return x
 
@@ -77,6 +80,7 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
     validation_loss = []
     validation_accuracy = []
     best_acc = 0
+    min_val_loss = 30.
     for epoch in range(num_epochs):
         # training model & store loss & acc / epoch
         correct_train = 0
@@ -114,10 +118,13 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
         # evaluate model & store loss & acc / epoch
         correct_test = 0
         total_test = 0
+        sum_val_loss = 0
+        count = 0
         with torch.no_grad():
             model.eval()
             val_bar = tqdm(test_loader)
             for images, labels in val_bar:
+                count += 1
                 # 1.Define variables
                 images = images.to(device)
                 labels = labels.to(device)
@@ -125,6 +132,7 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
                 outputs = model(images)
                 # 3.Calculate softmax and cross entropy loss
                 val_loss = loss_func(outputs, labels)
+                sum_val_loss += val_loss.item()
                 # 4.Get predictions from the maximum value
                 predicted = torch.max(outputs.data, 1)[1]
                 val_bar.set_description(desc='[%d/%d] | Validation Loss:%.4f' % (epoch + 1, num_epochs, val_loss.item()))
@@ -135,15 +143,16 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
         # 6.store val_acc / epoch
         val_accuracy = 100 * correct_test / float(total_test)
         validation_accuracy.append(val_accuracy)
-        if val_accuracy > best_acc:
-            best_acc = val_accuracy
+        if sum_val_loss / count < min_val_loss:
+            min_val_loss = sum_val_loss / count
             print('Save the Model!')
             torch.save(model, 'best_model.pth')
         # 11.store val_loss / epoch
-        validation_loss.append(val_loss.data)
+        validation_loss.append(sum_val_loss / count)
+        best_acc = max(best_acc, val_accuracy)
         print('Train Epoch: {}/{} Traing_Loss: {:.4f} Traing_acc: {:.2f}% Val_Loss: {:.4f} Val_accuracy: {:.2f} '
               'Best Val_accuracy: {:.2f}%'.format(epoch+1, num_epochs, train_loss.data, train_accuracy,
-                                                val_loss.data, val_accuracy, best_acc))
+                                                sum_val_loss / count, val_accuracy, best_acc))
 
 
     return training_loss, training_accuracy, validation_loss, validation_accuracy
@@ -180,7 +189,7 @@ def main():
     LR = 0.001
     batch_size = 8
     valid_batch_size = 8
-    n_iters = 1000
+    n_iters = 10000
     epochs = n_iters / (len(train_dataset) / batch_size)
     epochs = int(epochs)
 
