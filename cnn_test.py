@@ -47,8 +47,8 @@ def image_show_test_data(root, y_t, y_pred):
 
 def main():
     root = './test_data/'
-    # model_path = 'best_model.pth'
-    model_path = 'final_model.pth'
+    model_path = 'best_model.pth'
+    # model_path = 'final_model.pth'
 
     label_list = {}
     f = open('training data dic.txt', 'r', encoding="utf-8")

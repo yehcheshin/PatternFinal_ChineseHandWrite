@@ -61,7 +61,7 @@ class CNN(nn.Module):
             conv_bn(256, 256, 1),
             nn.AvgPool2d(2),
         )
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout()
         self.fc = nn.Linear(256*4*4, class_num)
 
     def forward(self, x):
@@ -193,7 +193,7 @@ def main():
     LR = 0.001
     batch_size = 8
     valid_batch_size = 8
-    n_iters = 10000
+    n_iters = 20000
     epochs = n_iters / (len(train_dataset) / batch_size)
     epochs = int(epochs)
 
