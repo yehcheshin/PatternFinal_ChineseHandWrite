@@ -72,6 +72,50 @@ class CNN(nn.Module):
         return x
 
 
+class CNN_1d(nn.Module):
+    def __init__(self, class_num):
+        super(CNN_1d, self).__init__()
+
+        def conv_bn(inp, oup, stride):
+            return nn.Sequential(
+                nn.Conv1d(inp, oup, (3, 3), stride, padding=(1, 1), bias=False),
+                nn.BatchNorm1d(oup),
+                nn.ReLU(inplace=True)
+            )
+        self.model = nn.Sequential(
+            conv_bn(1, 32, 2),
+            conv_bn(32, 64, 1),
+            conv_bn(64, 128, 2),
+            conv_bn(128, 128, 1),
+            conv_bn(128, 256, 2),
+            conv_bn(256, 256, 1),
+            nn.AvgPool2d(2),
+            # conv_bn(3, 32, 2),
+            # conv_bn(32, 64, 1),
+            # conv_bn(64, 128, 2),
+            # conv_bn(128, 128, 1),
+            # conv_bn(128, 256, 2),
+            # conv_bn(256, 256, 1),
+            # conv_bn(256, 512, 2),
+            # conv_bn(512, 512, 1),
+            # conv_bn(512, 512, 1),
+            # conv_bn(512, 512, 1),
+            # conv_bn(512, 512, 1),
+            # conv_bn(512, 512, 1),
+            # conv_bn(512, 1024, 2),
+            # conv_bn(1024, 1024, 1),
+            # nn.AvgPool1d(2),
+        )
+        self.dropout = nn.Dropout()
+        self.fc = nn.Linear(1024*64, class_num)
+
+    def forward(self, x):
+        x = self.model(x)
+        x = x.view(-1, 256*4*4)
+        x = self.dropout(x)
+        x = self.fc(x)
+        return x
+
 def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader, device):
     # Traning the Model
     # history-like list for store loss & acc value
@@ -213,7 +257,7 @@ def main():
     cnn = CNN(class_num=50)
     cnn.to(device)
     print(cnn)
-    summary(cnn, (1, 64, 64))
+    summary(cnn, (1, 4096))
     opt = torch.optim.AdamW(cnn.parameters(), lr=LR)  # optimize all cnn parameters
     ce = nn.CrossEntropyLoss()  # the target label is not one-hotted
 
