@@ -4,7 +4,7 @@ from PIL import Image
 import torchvision.transforms as transforms
 from torch.utils.data import TensorDataset, DataLoader
 import matplotlib.pyplot as plt
-from cnn import CNN
+from cnn import CNN, CNN_1d
 import numpy as np
 
 
@@ -47,9 +47,13 @@ def image_show_test_data(root, y_t, y_pred):
 
 def main():
     root = './test_data/'
-    model_path = 'best_model.pth'
-    # model_path = 'final_model.pth'
-
+    is_1d = True
+    if is_1d:
+        model_path = 'best_model_CNN1D.pth'
+        # model_path = 'final_model_CNN1D.pth'
+    else:
+        model_path = 'best_model_CNN.pth'
+        # model_path = 'final_model.pth'
     label_list = {}
     f = open('training data dic.txt', 'r', encoding="utf-8")
     for idx, line in enumerate(f.readlines()):
@@ -64,7 +68,10 @@ def main():
         img_path = root + file
         img = Image.open(img_path).convert('L')
         img = img.resize((64, 64))
-        trans_img = transform(img)
+        if is_1d:
+            trans_img = transform(img).view(1, 64*64)
+        else:
+            trans_img = transform(img)
         X_test.append(trans_img)
         y_test.append(label_list[file[-5:-4]])
     X_test_tensor = torch.stack(X_test)

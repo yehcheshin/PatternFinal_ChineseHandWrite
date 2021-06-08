@@ -15,7 +15,7 @@ except ImportError:
 
 
 class ChineseHandWriteDataset(Dataset):
-    def __init__(self, root="", label_dic={}, transform=None, resize=True, resize_size=128):
+    def __init__(self, root="", label_dic={}, transform=None, resize=True, resize_size=128, is_1d=False):
         self.img_file = []
         self.labelfile = []
         self.transform = transform
@@ -23,6 +23,7 @@ class ChineseHandWriteDataset(Dataset):
         self.resize = resize
         self.resize_size = resize_size
         self.label_dic = label_dic
+        self.is_id = is_1d
         for _, file in enumerate(os.listdir(root)):
             self.img_file.append(root + '/' + file)
 
@@ -34,8 +35,10 @@ class ChineseHandWriteDataset(Dataset):
             label = self.label_dic[label_chinese]
         if self.resize:
             img = img.resize((self.resize_size, self.resize_size))
-
-        return self.transform(img), label
+        if self.is_id:
+            return self.transform(img).view(1, self.resize_size*self.resize_size), label
+        else:
+            return self.transform(img), label
 
     def __len__(self):
         return len(self.img_file)
@@ -78,45 +81,38 @@ class CNN_1d(nn.Module):
 
         def conv_bn(inp, oup, stride):
             return nn.Sequential(
-                nn.Conv1d(inp, oup, (3, 3), stride, padding=(1, 1), bias=False),
+                nn.Conv1d(inp, oup, kernel_size=3, stride=stride, padding=1, bias=False),
                 nn.BatchNorm1d(oup),
                 nn.ReLU(inplace=True)
             )
         self.model = nn.Sequential(
             conv_bn(1, 32, 2),
+            conv_bn(32, 32, 1),
+            conv_bn(32, 32, 2),
             conv_bn(32, 64, 1),
+            conv_bn(64, 64, 2),
+            conv_bn(64, 64, 1),
             conv_bn(64, 128, 2),
-            conv_bn(128, 128, 1),
+            conv_bn(128, 128, 2),
+            conv_bn(128, 128, 2),
             conv_bn(128, 256, 2),
-            conv_bn(256, 256, 1),
-            nn.AvgPool2d(2),
-            # conv_bn(3, 32, 2),
-            # conv_bn(32, 64, 1),
-            # conv_bn(64, 128, 2),
-            # conv_bn(128, 128, 1),
-            # conv_bn(128, 256, 2),
-            # conv_bn(256, 256, 1),
-            # conv_bn(256, 512, 2),
-            # conv_bn(512, 512, 1),
-            # conv_bn(512, 512, 1),
-            # conv_bn(512, 512, 1),
-            # conv_bn(512, 512, 1),
-            # conv_bn(512, 512, 1),
-            # conv_bn(512, 1024, 2),
-            # conv_bn(1024, 1024, 1),
-            # nn.AvgPool1d(2),
+            conv_bn(256, 256, 2),
+            conv_bn(256, 512, 2),
+            conv_bn(512, 512, 2),
+            nn.MaxPool1d(kernel_size=2, stride=2)
         )
         self.dropout = nn.Dropout()
-        self.fc = nn.Linear(1024*64, class_num)
+        self.fc = nn.Linear(1024, class_num)
 
     def forward(self, x):
         x = self.model(x)
-        x = x.view(-1, 256*4*4)
+        x = x.view(x.shape[0], x.size(1) * x.size(2))
         x = self.dropout(x)
         x = self.fc(x)
         return x
 
-def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader, device):
+
+def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader, device, is_1d_cnn):
     # Traning the Model
     # history-like list for store loss & acc value
     training_loss = []
@@ -190,21 +186,27 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
         if sum_val_loss / count < min_val_loss:
             min_val_loss = sum_val_loss / count
             print('Save the Model!')
-            torch.save(model, 'best_model.pth')
+            if is_1d_cnn:
+                torch.save(model, 'best_model_CNN1D.pth')
+            else:
+                torch.save(model, 'best_model_CNN.pth')
         # 11.store val_loss / epoch
         validation_loss.append(sum_val_loss / count)
         best_acc = max(best_acc, val_accuracy)
         print('Train Epoch: {}/{} Traing_Loss: {:.4f} Traing_acc: {:.2f}% Val_Loss: {:.4f} Val_accuracy: {:.2f} '
               'Best Val_accuracy: {:.2f}%'.format(epoch+1, num_epochs, train_loss.data, train_accuracy,
                                                 sum_val_loss / count, val_accuracy, best_acc))
-        torch.save(model, 'final_model.pth')
+        if is_1d_cnn:
+            torch.save(model, 'final_model_CNN1D.pth')
+        else:
+            torch.save(model, 'final_model_CNN.pth')
 
     return training_loss, training_accuracy, validation_loss, validation_accuracy
 
 
 def main():
     root = './k_mean_data/'
-
+    is_1D_cnn = True
     label_list = {}
     f = open('training data dic.txt', 'r', encoding="utf-8")
     for idx, line in enumerate(f.readlines()):
@@ -222,7 +224,8 @@ def main():
     for idx, dir_ in enumerate(os.listdir(root)):
         dataset = ChineseHandWriteDataset(root=root + dir_, label_dic=label_list, transform=transform,
                                           resize=True,
-                                          resize_size=64)
+                                          resize_size=64,
+                                          is_1d=is_1D_cnn)
         train_set_size = int(len(dataset) * 0.8)
         valid_set_size = len(dataset) - train_set_size
         train_set, valid_set = random_split(dataset, [train_set_size, valid_set_size], torch.Generator().manual_seed(0))
@@ -231,6 +234,8 @@ def main():
 
     train_dataset = ConcatDataset(train_dataset)
     valid_dataset = ConcatDataset(valid_dataset)
+    # print(train_dataset[0][0].size())
+    # print(valid_dataset[0][0].size())
 
     # Hyper Parameters
     # batch_size, epoch and iteration
@@ -254,16 +259,25 @@ def main():
         device = torch.device('cpu')
         print('Warning! Using CPU.')
 
-    cnn = CNN(class_num=50)
+    if is_1D_cnn:
+        cnn = CNN_1d(class_num=50)
+    else:
+        cnn = CNN(class_num=50)
+
     cnn.to(device)
     print(cnn)
-    summary(cnn, (1, 4096))
+    if is_1D_cnn:
+        summary(cnn, (1, 64 * 64))
+    else:
+        summary(cnn, (1, 64, 64))
+
     opt = torch.optim.AdamW(cnn.parameters(), lr=LR)  # optimize all cnn parameters
     ce = nn.CrossEntropyLoss()  # the target label is not one-hotted
 
     training_loss, training_accuracy, validation_loss, validation_accuracy = fit_model(cnn, ce, opt,
                                                                                        epochs, train_dataloader,
-                                                                                       valid_dataloader, device)
+                                                                                       valid_dataloader, device,
+                                                                                       is_1D_cnn)
 
     # CNN Classifier report and analysis
     # visualization
