@@ -1,11 +1,12 @@
 import torch
 import os
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader, random_split, ConcatDataset
+from torch.utils.data import Dataset, DataLoader, random_split, ConcatDataset, TensorDataset
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 from torchsummary import summary
 try:
     from tqdm import tqdm
@@ -99,6 +100,41 @@ class CNN_1d(nn.Module):
             conv_bn(256, 256, 2),
             conv_bn(256, 512, 2),
             conv_bn(512, 512, 2),
+            nn.MaxPool1d(kernel_size=2, stride=2)
+        )
+        self.dropout = nn.Dropout()
+        self.fc = nn.Linear(1024, class_num)
+
+    def forward(self, x):
+        x = self.model(x)
+        x = x.view(x.shape[0], x.size(1) * x.size(2))
+        x = self.dropout(x)
+        x = self.fc(x)
+        return x
+
+
+class CNN_1d_PCA(nn.Module):
+    def __init__(self, class_num):
+        super(CNN_1d_PCA, self).__init__()
+
+        def conv_bn(inp, oup, stride):
+            return nn.Sequential(
+                nn.Conv1d(inp, oup, kernel_size=3, stride=stride, padding=1, bias=False),
+                nn.BatchNorm1d(oup),
+                nn.ReLU(inplace=True)
+            )
+        self.model = nn.Sequential(
+            conv_bn(1, 32, 2),
+            conv_bn(32, 32, 1),
+            conv_bn(32, 64, 2),
+            conv_bn(64, 64, 1),
+            conv_bn(64, 128, 2),
+            conv_bn(128, 128, 1),
+            conv_bn(128, 256, 2),
+            conv_bn(256, 256, 1),
+            conv_bn(256, 512, 2),
+            conv_bn(512, 512, 1),
+            conv_bn(512, 1024, 2),
             nn.MaxPool1d(kernel_size=2, stride=2)
         )
         self.dropout = nn.Dropout()
@@ -207,33 +243,59 @@ def fit_model(model, loss_func, optimizer, num_epochs, train_loader, test_loader
 def main():
     root = './k_mean_data/'
     is_1D_cnn = True
-    label_list = {}
-    f = open('training data dic.txt', 'r', encoding="utf-8")
-    for idx, line in enumerate(f.readlines()):
-        if idx == 50:
-            break
-        label_list[line[0]] = idx
+    use_pca = True
+    if use_pca and is_1D_cnn:
+        print('Use PCA reduce dimension data.')
+        pca_data_path = 'k_means_data_pca.npy'
+        pca_label_path = 'k_means_labels_pca.npy'
+        pca_data = None
+        pca_label = None
+        try:
+            pca_data = np.load(pca_data_path)
+            pca_label = np.load(pca_label_path)
+        except:
+            print('Can not find the file')
+            exit()
+        pca_data = np.reshape(pca_data, newshape=(pca_data.shape[0], 1, pca_data.shape[1]))
+        tensor_data = torch.from_numpy(pca_data).float()
+        tensor_label = torch.from_numpy(pca_label).long()
+        # print(tensor_data[0][0])
+        # print(tensor_label[0])
+        pca_dataset = TensorDataset(tensor_data, tensor_label)
+        # print(pca_dataset[0])
+        train_set_size = int(len(pca_dataset) * 0.8)
+        valid_set_size = len(pca_dataset) - train_set_size
+        train_dataset, valid_dataset = random_split(pca_dataset, [train_set_size, valid_set_size],
+                                                    torch.Generator().manual_seed(0))
 
-    train_dataset = []
-    valid_dataset = []
-    transform = transforms.Compose([
-        transforms.RandomAffine(degrees=(-10, 10), translate=(0.1, 0.1), fill=255),
-        transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.8, 1)),
-        transforms.ToTensor()
-    ])
-    for idx, dir_ in enumerate(os.listdir(root)):
-        dataset = ChineseHandWriteDataset(root=root + dir_, label_dic=label_list, transform=transform,
-                                          resize=True,
-                                          resize_size=64,
-                                          is_1d=is_1D_cnn)
-        train_set_size = int(len(dataset) * 0.8)
-        valid_set_size = len(dataset) - train_set_size
-        train_set, valid_set = random_split(dataset, [train_set_size, valid_set_size], torch.Generator().manual_seed(0))
-        train_dataset.append(train_set)
-        valid_dataset.append(valid_set)
+    else:
+        label_list = {}
+        f = open('training data dic.txt', 'r', encoding="utf-8")
+        for idx, line in enumerate(f.readlines()):
+            if idx == 50:
+                break
+            label_list[line[0]] = idx
 
-    train_dataset = ConcatDataset(train_dataset)
-    valid_dataset = ConcatDataset(valid_dataset)
+        train_dataset = []
+        valid_dataset = []
+        transform = transforms.Compose([
+            transforms.RandomAffine(degrees=(-10, 10), translate=(0.1, 0.1), fill=255),
+            transforms.ColorJitter(brightness=(0.5, 1.5), contrast=(0.8, 1)),
+            transforms.ToTensor()
+        ])
+        for idx, dir_ in enumerate(os.listdir(root)):
+            dataset = ChineseHandWriteDataset(root=root + dir_, label_dic=label_list, transform=transform,
+                                              resize=True,
+                                              resize_size=64,
+                                              is_1d=is_1D_cnn)
+            train_set_size = int(len(dataset) * 0.8)
+            valid_set_size = len(dataset) - train_set_size
+            train_set, valid_set = random_split(dataset, [train_set_size, valid_set_size], torch.Generator().manual_seed(0))
+            train_dataset.append(train_set)
+            valid_dataset.append(valid_set)
+
+        train_dataset = ConcatDataset(train_dataset)
+        valid_dataset = ConcatDataset(valid_dataset)
     # print(train_dataset[0][0].size())
     # print(valid_dataset[0][0].size())
 
@@ -242,7 +304,7 @@ def main():
     LR = 0.001
     batch_size = 8
     valid_batch_size = 8
-    n_iters = 20000
+    n_iters = 50000
     epochs = n_iters / (len(train_dataset) / batch_size)
     epochs = int(epochs)
 
@@ -259,14 +321,22 @@ def main():
         device = torch.device('cpu')
         print('Warning! Using CPU.')
 
-    if is_1D_cnn:
+    if is_1D_cnn and use_pca:
+        print('Use 1D CNN train on PCA reduce dimension data')
+        cnn = CNN_1d_PCA(class_num=50)
+    elif is_1D_cnn and not use_pca:
+        print('Use 1D CNN train on 1 dimension data')
         cnn = CNN_1d(class_num=50)
     else:
+        print('Use general CNN train on 2 dimension data')
         cnn = CNN(class_num=50)
 
     cnn.to(device)
     print(cnn)
-    if is_1D_cnn:
+
+    if is_1D_cnn and use_pca:
+        summary(cnn, (1, 192))
+    elif is_1D_cnn and not use_pca:
         summary(cnn, (1, 64 * 64))
     else:
         summary(cnn, (1, 64, 64))

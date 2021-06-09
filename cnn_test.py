@@ -4,7 +4,7 @@ from PIL import Image
 import torchvision.transforms as transforms
 from torch.utils.data import TensorDataset, DataLoader
 import matplotlib.pyplot as plt
-from cnn import CNN, CNN_1d
+from cnn import CNN, CNN_1d, CNN_1d_PCA
 import numpy as np
 
 
@@ -48,12 +48,13 @@ def image_show_test_data(root, y_t, y_pred):
 def main():
     root = './test_data/'
     is_1d = True
+    use_pca = True
     if is_1d:
         model_path = 'best_model_CNN1D.pth'
         # model_path = 'final_model_CNN1D.pth'
     else:
         model_path = 'best_model_CNN.pth'
-        # model_path = 'final_model.pth'
+        # model_path = 'final_model_CNN.pth'
     label_list = {}
     f = open('training data dic.txt', 'r', encoding="utf-8")
     for idx, line in enumerate(f.readlines()):
@@ -61,22 +62,42 @@ def main():
             break
         label_list[line[0]] = idx
 
-    X_test = []
     y_test = []
-    transform = transforms.ToTensor()
-    for _, file in enumerate(os.listdir(root)):
-        img_path = root + file
-        img = Image.open(img_path).convert('L')
-        img = img.resize((64, 64))
-        if is_1d:
-            trans_img = transform(img).view(1, 64*64)
-        else:
-            trans_img = transform(img)
-        X_test.append(trans_img)
-        y_test.append(label_list[file[-5:-4]])
-    X_test_tensor = torch.stack(X_test)
-    y_test_tensor = torch.tensor(y_test)
-    test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+    if use_pca:
+        print('Use PCA reduce dimension data.')
+        pca_data_path = 'test_data_pca.npy'
+        pca_label_path = 'test_label_pca.npy'
+        pca_data = None
+        pca_label = None
+        try:
+            pca_data = np.load(pca_data_path)
+            pca_label = np.load(pca_label_path)
+        except:
+            print('Can not find the file')
+            exit()
+        pca_data = np.reshape(pca_data, newshape=(pca_data.shape[0], 1, pca_data.shape[1]))
+        y_test = pca_label.tolist()
+        tensor_data = torch.from_numpy(pca_data).float()
+        tensor_label = torch.from_numpy(pca_label).long()
+        # print(tensor_data[0][0])
+        # print(tensor_label[0])
+        test_dataset = TensorDataset(tensor_data, tensor_label)
+    else:
+        X_test = []
+        transform = transforms.ToTensor()
+        for _, file in enumerate(os.listdir(root)):
+            img_path = root + file
+            img = Image.open(img_path).convert('L')
+            img = img.resize((64, 64))
+            if is_1d:
+                trans_img = transform(img).view(1, 64*64)
+            else:
+                trans_img = transform(img)
+            X_test.append(trans_img)
+            y_test.append(label_list[file[-5:-4]])
+        X_test_tensor = torch.stack(X_test)
+        y_test_tensor = torch.tensor(y_test)
+        test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
     test_dataloader = DataLoader(
         test_dataset, batch_size=1, shuffle=False, pin_memory=True, num_workers=1)
 
@@ -97,7 +118,7 @@ def main():
 
     model.to(device)
 
-    predictions, accuracy = evaluation(model, device, test_dataloader, len(y_test))
+    predictions, accuracy = evaluation(model, device, test_dataloader, len(test_dataset))
     chinese_label = list(label_list.keys())
     for i in range(len(predictions)):
         print('Cnn predict label:', chinese_label[predictions[i]])
